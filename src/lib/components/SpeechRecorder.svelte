@@ -50,7 +50,8 @@
 		error = null;
 		isRecording = true;
 
-		recognition.onresult = async (event: SpeechRecognitionEvent) => {
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		recognition.onresult = async (event: any) => {
 			const spoken = event.results[0][0].transcript;
 			const s = computeAccuracy(spoken, targetText);
 			transcript = spoken;
@@ -64,7 +65,8 @@
 			}
 		};
 
-		recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		recognition.onerror = (event: any) => {
 			isRecording = false;
 			if (event.error === 'no-speech') return;
 			if (event.error === 'not-allowed') {

@@ -23,6 +23,9 @@ jobs:
 
       - name: Run type check
         run: npm run check
+        env:
+          PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+          PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
 
       - name: Run unit tests
         run: npm run test:unit

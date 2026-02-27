@@ -76,7 +76,7 @@
 						placeholder="••••••••"
 						required
 						autocomplete="new-password"
-						minlength="6"
+						minlength={6}
 					/>
 				</div>
 				<div class="space-y-1.5">
