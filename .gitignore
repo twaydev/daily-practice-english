@@ -1,0 +1,10 @@
+.env
+.env.*
+!.env.example
+supabase/.env.local
+
+node_modules/
+build/
+.svelte-kit/
+
+.DS_Store
