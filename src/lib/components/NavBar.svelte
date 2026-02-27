@@ -20,7 +20,8 @@
 	const navLinks = [
 		{ href: `${base}/`, label: 'Home' },
 		{ href: `${base}/practice`, label: 'Practice' },
-		{ href: `${base}/favorites`, label: 'Favorites' }
+		{ href: `${base}/favorites`, label: 'Favorites' },
+		{ href: `${base}/history`, label: 'History' }
 	];
 </script>
 

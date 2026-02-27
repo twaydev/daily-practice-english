@@ -1,30 +1,68 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
 	import Icon from '@iconify/svelte';
 	import { Button } from '$lib/components/ui/button';
 
 	type Props = {
 		targetText: string;
-		/** Called after recognition ends with the transcript + accuracy score. */
-		onRecorded: (transcript: string, score: number) => Promise<void>;
+		/** Called after recording stops with transcript, score, and audio blob (null if unavailable). */
+		onRecorded: (transcript: string, score: number, blob: Blob | null) => Promise<void>;
 	};
 
 	let { targetText, onRecorded }: Props = $props();
 
 	let supported = $state(false);
+	let mediaSupported = $state(false);
 	let isRecording = $state(false);
 	let transcript = $state<string | null>(null);
 	let score = $state<number | null>(null);
 	let error = $state<string | null>(null);
 	let saving = $state(false);
-	let manualMode = $state(false);
-	let manualInput = $state('');
+	let audioUrl = $state<string | null>(null);
+	let duration = $state(0);
+
+	// Internal refs (not reactive)
+	let mediaRecorder: MediaRecorder | null = null;
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	let recognition: any = null;
+	let chunks: Blob[] = [];
+	let stream: MediaStream | null = null;
+	let timerInterval: ReturnType<typeof setInterval> | null = null;
+	let pendingTranscript = '';
 
 	onMount(() => {
 		supported =
 			typeof window !== 'undefined' &&
 			('SpeechRecognition' in window || 'webkitSpeechRecognition' in window);
+		mediaSupported =
+			typeof window !== 'undefined' && 'MediaRecorder' in window && 'mediaDevices' in navigator;
 	});
+
+	onDestroy(() => {
+		stopTimer();
+		if (audioUrl) URL.revokeObjectURL(audioUrl);
+		if (stream) stream.getTracks().forEach((t) => t.stop());
+	});
+
+	function startTimer() {
+		duration = 0;
+		timerInterval = setInterval(() => {
+			duration += 1;
+		}, 1000);
+	}
+
+	function stopTimer() {
+		if (timerInterval) {
+			clearInterval(timerInterval);
+			timerInterval = null;
+		}
+	}
+
+	function formatDuration(s: number) {
+		const m = Math.floor(s / 60);
+		const sec = s % 60;
+		return `${m}:${sec.toString().padStart(2, '0')}`;
+	}
 
 	/** Word-overlap accuracy: how many target words appeared in what the user said. */
 	function computeAccuracy(spoken: string, target: string): number {
@@ -36,76 +74,87 @@
 		return Math.round((matches / targetWords.length) * 100);
 	}
 
-	function startRecording() {
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-		const recognition = new SR();
-		recognition.lang = 'en-US';
-		recognition.interimResults = false;
-		recognition.maxAlternatives = 1;
-		recognition.continuous = false;
-
+	async function startRecording() {
 		transcript = null;
 		score = null;
 		error = null;
-		isRecording = true;
+		audioUrl = null;
+		pendingTranscript = '';
+		chunks = [];
 
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		recognition.onresult = async (event: any) => {
-			const spoken = event.results[0][0].transcript;
+		try {
+			stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+		} catch {
+			error = 'Microphone permission denied. Please allow access in your browser settings.';
+			return;
+		}
+
+		// Start MediaRecorder on the shared stream
+		mediaRecorder = new MediaRecorder(stream);
+		mediaRecorder.ondataavailable = (e) => {
+			if (e.data.size > 0) chunks.push(e.data);
+		};
+		mediaRecorder.onstop = async () => {
+			stream?.getTracks().forEach((t) => t.stop());
+			stream = null;
+
+			const blob = chunks.length > 0 ? new Blob(chunks, { type: 'audio/webm' }) : null;
+			if (blob) {
+				if (audioUrl) URL.revokeObjectURL(audioUrl);
+				audioUrl = URL.createObjectURL(blob);
+			}
+
+			const spoken = pendingTranscript;
 			const s = computeAccuracy(spoken, targetText);
-			transcript = spoken;
-			score = s;
+			transcript = spoken || '(no speech detected)';
+			score = spoken ? s : 0;
 
 			saving = true;
 			try {
-				await onRecorded(spoken, s);
+				await onRecorded(spoken || '', s, blob);
 			} finally {
 				saving = false;
 			}
 		};
+		mediaRecorder.start();
 
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		recognition.onerror = (event: any) => {
-			isRecording = false;
-			if (event.error === 'no-speech') return;
-			if (event.error === 'not-allowed') {
-				error = 'Microphone permission denied. Please allow access in your browser settings.';
-			} else if (event.error === 'network') {
-				error = 'Speech recognition requires Google\'s servers and couldn\'t connect. Type your attempt below instead.';
-				manualMode = true;
-			} else {
-				error = `Recording failed (${event.error})`;
+		// Start SpeechRecognition in parallel (gracefully absent)
+		if (supported) {
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+			recognition = new SR();
+			recognition!.lang = 'en-US';
+			recognition!.interimResults = false;
+			recognition!.maxAlternatives = 1;
+			recognition!.continuous = false;
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			recognition!.onresult = (event: any) => {
+				pendingTranscript = event.results[0][0].transcript;
+			};
+			recognition!.onerror = () => {
+				// Non-fatal: MediaRecorder still captures audio
+			};
+			try {
+				recognition!.start();
+			} catch {
+				// Ignore — recognition is optional
 			}
-		};
-
-		recognition.onend = () => {
-			isRecording = false;
-		};
-
-		try {
-			recognition.start();
-		} catch {
-			isRecording = false;
-			error = 'Could not start recording';
 		}
+
+		isRecording = true;
+		startTimer();
 	}
 
-	async function submitManual() {
-		const spoken = manualInput.trim();
-		if (!spoken) return;
-		const s = computeAccuracy(spoken, targetText);
-		transcript = spoken;
-		score = s;
-		manualMode = false;
-		manualInput = '';
-		error = null;
+	function stopRecording() {
+		stopTimer();
+		isRecording = false;
 
-		saving = true;
-		try {
-			await onRecorded(spoken, s);
-		} finally {
-			saving = false;
+		if (recognition) {
+			try { recognition.stop(); } catch { /* ignore */ }
+			recognition = null;
+		}
+		if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+			mediaRecorder.stop();
 		}
 	}
 
@@ -113,8 +162,11 @@
 		transcript = null;
 		score = null;
 		error = null;
-		manualMode = false;
-		manualInput = '';
+		if (audioUrl) {
+			URL.revokeObjectURL(audioUrl);
+			audioUrl = null;
+		}
+		duration = 0;
 	}
 
 	const scoreLabel = $derived(
@@ -154,9 +206,9 @@
 	);
 </script>
 
-{#if !supported}
+{#if !mediaSupported && !supported}
 	<p class="text-xs text-muted-foreground italic">
-		Speech recording requires Chrome or Edge. Your browser doesn't support it.
+		Speech recording is not supported in this browser. Try Chrome or Edge.
 	</p>
 {:else}
 	<div class="space-y-3 rounded-md border p-4">
@@ -177,27 +229,39 @@
 
 		{#if transcript === null && !isRecording}
 			<p class="text-xs text-muted-foreground">
-				Read the sentence aloud, then click Record. Your pronunciation is compared word-by-word.
+				Tap the button to start recording. Tap again to stop.
 			</p>
 		{/if}
 
-		<Button
-			variant={isRecording ? 'destructive' : 'outline'}
-			onclick={isRecording ? undefined : startRecording}
-			disabled={saving}
-			class="gap-2"
-		>
-			{#if isRecording}
-				<span class="h-2 w-2 rounded-full bg-white animate-pulse"></span>
-				Listening…
-			{:else}
-				<Icon icon="mdi:microphone" width="16" />
-				{transcript !== null ? 'Record again' : 'Record'}
-			{/if}
-		</Button>
+		<!-- Big tap-to-record / tap-to-stop pill button -->
+		{#if isRecording}
+			<button
+				onclick={stopRecording}
+				class="w-full flex items-center justify-center gap-3 rounded-full bg-destructive text-destructive-foreground py-3 px-6 font-semibold text-sm animate-pulse transition-all"
+			>
+				<span class="h-2.5 w-2.5 rounded-full bg-white"></span>
+				Recording… {formatDuration(duration)}
+				<span class="text-xs font-normal opacity-80">Tap to stop</span>
+			</button>
+		{:else}
+			<Button
+				variant={transcript !== null ? 'outline' : 'default'}
+				onclick={transcript !== null ? reset : startRecording}
+				disabled={saving}
+				class="w-full rounded-full py-3 h-auto gap-2 font-semibold"
+			>
+				<Icon icon="mdi:microphone" width="18" />
+				{transcript !== null ? 'Try again' : 'Tap to record'}
+			</Button>
+		{/if}
 
 		{#if transcript !== null}
 			<div class="space-y-3">
+				<!-- Local audio preview -->
+				{#if audioUrl}
+					<audio controls src={audioUrl} class="w-full h-10 rounded-md"></audio>
+				{/if}
+
 				<!-- What user said -->
 				<div class="rounded-md bg-muted/40 px-3 py-2 text-sm">
 					<p class="text-xs text-muted-foreground mb-1">You said:</p>
@@ -230,21 +294,6 @@
 
 		{#if error}
 			<p class="text-xs text-destructive">{error}</p>
-		{/if}
-
-		{#if manualMode}
-			<div class="flex gap-2">
-				<input
-					type="text"
-					bind:value={manualInput}
-					onkeydown={(e) => { if (e.key === 'Enter') submitManual(); }}
-					placeholder="Type what you said…"
-					class="flex-1 h-9 rounded-md border border-input bg-background px-3 py-1 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-				/>
-				<Button onclick={submitManual} disabled={!manualInput.trim() || saving} class="h-9">
-					Submit
-				</Button>
-			</div>
 		{/if}
 	</div>
 {/if}

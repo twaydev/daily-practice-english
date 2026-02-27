@@ -10,6 +10,8 @@
     updateSentenceTags,
     updateSentencePhoneticData,
     addPracticeEntry,
+    uploadRecording,
+    updatePracticeEntryAudio,
   } from "$lib/services/supabase";
   import type {
     Sentence,
@@ -118,15 +120,23 @@
     }
   }
 
-  async function handleRecorded(transcript: string, score: number) {
+  async function handleRecorded(transcript: string, score: number, blob: Blob | null) {
     if (!$authStore.user) return;
-    await addPracticeEntry(
+    const entryId = await addPracticeEntry(
       $authStore.user.id,
       savedSentence?.id ?? null,
       $practiceStore.currentSentence,
       transcript,
       score,
     );
+    if (blob) {
+      try {
+        const path = await uploadRecording($authStore.user.id, entryId, blob);
+        await updatePracticeEntryAudio(entryId, path);
+      } catch {
+        // Non-critical: audio upload failed, history entry still saved
+      }
+    }
   }
 
   function handleKeyDown(e: KeyboardEvent) {

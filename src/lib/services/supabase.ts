@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY } from '$env/static/public';
-import type { ContentType, Sentence, Favorite } from '$lib/types';
+import type { ContentType, Sentence, Favorite, PracticeEntry, PracticeHistoryGroup } from '$lib/types';
 
 export const supabase = createClient(PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY);
 
@@ -75,16 +75,80 @@ export async function addPracticeEntry(
 	sentenceText: string,
 	userTranscript: string,
 	accuracyScore: number
-): Promise<void> {
-	const { error } = await supabase.from('practice_history').insert({
-		user_id: userId,
-		sentence_id: sentenceId,
-		sentence_text: sentenceText,
-		user_transcript: userTranscript,
-		accuracy_score: accuracyScore
-	});
+): Promise<string> {
+	const { data, error } = await supabase
+		.from('practice_history')
+		.insert({
+			user_id: userId,
+			sentence_id: sentenceId,
+			sentence_text: sentenceText,
+			user_transcript: userTranscript,
+			accuracy_score: accuracyScore
+		})
+		.select('id')
+		.single();
 
 	if (error) throw error;
+	return data.id;
+}
+
+export async function uploadRecording(
+	userId: string,
+	entryId: string,
+	blob: Blob
+): Promise<string> {
+	const path = `${userId}/${entryId}.webm`;
+	const { error } = await supabase.storage.from('recordings').upload(path, blob, {
+		contentType: 'audio/webm',
+		upsert: true
+	});
+	if (error) throw error;
+	return path;
+}
+
+export async function getRecordingUrl(path: string): Promise<string> {
+	const { data, error } = await supabase.storage
+		.from('recordings')
+		.createSignedUrl(path, 3600);
+	if (error) throw error;
+	return data.signedUrl;
+}
+
+export async function updatePracticeEntryAudio(
+	entryId: string,
+	audioUrl: string
+): Promise<void> {
+	const { error } = await supabase
+		.from('practice_history')
+		.update({ audio_url: audioUrl })
+		.eq('id', entryId);
+	if (error) throw error;
+}
+
+export async function getPracticeHistory(userId: string): Promise<PracticeHistoryGroup[]> {
+	const { data, error } = await supabase
+		.from('practice_history')
+		.select('*')
+		.eq('user_id', userId)
+		.order('sentence_text')
+		.order('created_at', { ascending: false });
+
+	if (error) throw error;
+	const entries = (data ?? []) as PracticeEntry[];
+
+	// Group client-side by sentence_text
+	const map = new Map<string, PracticeEntry[]>();
+	for (const entry of entries) {
+		const key = entry.sentence_text;
+		const group = map.get(key) ?? [];
+		group.push(entry);
+		map.set(key, group);
+	}
+
+	return Array.from(map.entries()).map(([sentence_text, attempts]) => ({
+		sentence_text,
+		attempts
+	}));
 }
 
 export async function getUserFavoriteIds(userId: string): Promise<string[]> {

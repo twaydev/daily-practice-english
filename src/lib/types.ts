@@ -42,5 +42,11 @@ export interface PracticeEntry {
 	sentence_text: string;
 	user_transcript: string;
 	accuracy_score: number;
+	audio_url?: string | null;
 	created_at: string;
+}
+
+export interface PracticeHistoryGroup {
+	sentence_text: string;
+	attempts: PracticeEntry[];
 }
