@@ -202,8 +202,18 @@
 										controls
 										src={playingUrl}
 										autoplay
-										class="w-full h-10 rounded-md"
+										class="w-full rounded-md"
+										style="height:54px"
 										onended={() => { playingId = null; playingUrl = null; }}
+										onerror={(e) => {
+											const el = e.currentTarget as HTMLAudioElement;
+											const code = el.error?.code ?? '?';
+											const msg = el.error?.message ?? 'unknown';
+											console.error('[audio] error', code, msg);
+											toast.error(`Cannot play recording (error ${code}): ${msg}`);
+											playingId = null;
+											playingUrl = null;
+										}}
 									></audio>
 								</div>
 							{/if}
