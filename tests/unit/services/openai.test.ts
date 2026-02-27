@@ -1,5 +1,16 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+// Mock the supabase client before importing analyzeSentence
+vi.mock('$lib/services/supabase', () => ({
+	supabase: {
+		functions: {
+			invoke: vi.fn()
+		}
+	}
+}));
+
 import { analyzeSentence } from '$lib/services/openai';
+import { supabase } from '$lib/services/supabase';
 
 const mockPhoneticAnalysis = {
 	ipa: '/aɪ æm ˈlʊkɪŋ/',
@@ -24,17 +35,14 @@ const mockPhrasalAnalysis = {
 
 describe('analyzeSentence', () => {
 	beforeEach(() => {
-		vi.stubGlobal('fetch', vi.fn());
-	});
-
-	afterEach(() => {
-		vi.unstubAllGlobals();
+		vi.clearAllMocks();
 	});
 
 	it('returns PhoneticAnalysis for sentence content type', async () => {
-		vi.mocked(fetch).mockResolvedValueOnce(
-			new Response(JSON.stringify(mockPhoneticAnalysis), { status: 200 })
-		);
+		vi.mocked(supabase.functions.invoke).mockResolvedValueOnce({
+			data: mockPhoneticAnalysis,
+			error: null
+		});
 
 		const result = await analyzeSentence('I am looking.', 'sentence');
 
@@ -46,9 +54,10 @@ describe('analyzeSentence', () => {
 	});
 
 	it('returns PhrasalAnalysis for phrasal content type', async () => {
-		vi.mocked(fetch).mockResolvedValueOnce(
-			new Response(JSON.stringify(mockPhrasalAnalysis), { status: 200 })
-		);
+		vi.mocked(supabase.functions.invoke).mockResolvedValueOnce({
+			data: mockPhrasalAnalysis,
+			error: null
+		});
 
 		const result = await analyzeSentence('give up', 'phrasal');
 
@@ -59,51 +68,38 @@ describe('analyzeSentence', () => {
 		expect(Array.isArray(phrasal.formVariants)).toBe(true);
 	});
 
-	it('sends Authorization header when access token provided', async () => {
-		vi.mocked(fetch).mockResolvedValueOnce(
-			new Response(JSON.stringify(mockPhoneticAnalysis), { status: 200 })
-		);
+	it('invokes the correct function name with the right body', async () => {
+		vi.mocked(supabase.functions.invoke).mockResolvedValueOnce({
+			data: mockPhoneticAnalysis,
+			error: null
+		});
 
-		await analyzeSentence('Test sentence.', 'sentence', 'my-access-token');
+		await analyzeSentence('give up', 'phrasal');
 
-		const [, options] = vi.mocked(fetch).mock.calls[0];
-		const headers = options?.headers as Record<string, string>;
-		expect(headers['Authorization']).toBe('Bearer my-access-token');
+		expect(supabase.functions.invoke).toHaveBeenCalledWith('analyze-sentence', {
+			body: { sentence: 'give up', content_type: 'phrasal' }
+		});
 	});
 
-	it('falls back to anon key in Authorization header when no access token provided', async () => {
-		vi.mocked(fetch).mockResolvedValueOnce(
-			new Response(JSON.stringify(mockPhoneticAnalysis), { status: 200 })
-		);
-
-		await analyzeSentence('Test sentence.', 'sentence');
-
-		const [, options] = vi.mocked(fetch).mock.calls[0];
-		const headers = options?.headers as Record<string, string>;
-		// Should always have an Authorization header — anon key when no user token
-		expect(headers['Authorization']).toMatch(/^Bearer /);
-	});
-
-	it('throws on non-ok response', async () => {
-		vi.mocked(fetch).mockResolvedValueOnce(
-			new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 })
-		);
+	it('throws when invoke returns an error', async () => {
+		vi.mocked(supabase.functions.invoke).mockResolvedValueOnce({
+			data: null,
+			error: { message: 'Unauthorized' }
+		});
 
 		await expect(analyzeSentence('Test.', 'sentence')).rejects.toThrow('Unauthorized');
 	});
 
-	it('sends POST request with correct body', async () => {
-		vi.mocked(fetch).mockResolvedValueOnce(
-			new Response(JSON.stringify(mockPhoneticAnalysis), { status: 200 })
-		);
+	it('invokes with sentence content type body', async () => {
+		vi.mocked(supabase.functions.invoke).mockResolvedValueOnce({
+			data: mockPhoneticAnalysis,
+			error: null
+		});
 
-		await analyzeSentence('give up', 'phrasal');
+		await analyzeSentence('I am looking.', 'sentence');
 
-		const [, options] = vi.mocked(fetch).mock.calls[0];
-		expect(options?.method).toBe('POST');
-
-		const body = JSON.parse(options?.body as string);
-		expect(body.sentence).toBe('give up');
-		expect(body.content_type).toBe('phrasal');
+		expect(supabase.functions.invoke).toHaveBeenCalledWith('analyze-sentence', {
+			body: { sentence: 'I am looking.', content_type: 'sentence' }
+		});
 	});
 });

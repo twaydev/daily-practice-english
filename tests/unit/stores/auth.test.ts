@@ -66,10 +66,13 @@ describe('authStore', () => {
 
 		await authStore.signUp('new@example.com', 'password123');
 
-		expect(supabase.auth.signUp).toHaveBeenCalledWith({
-			email: 'new@example.com',
-			password: 'password123'
-		});
+		expect(supabase.auth.signUp).toHaveBeenCalledWith(
+			expect.objectContaining({
+				email: 'new@example.com',
+				password: 'password123',
+				options: expect.objectContaining({ emailRedirectTo: expect.any(String) })
+			})
+		);
 	});
 
 	it('calls signOut on signOut()', async () => {

@@ -1,7 +1,6 @@
-import { writable, get } from 'svelte/store';
+import { writable } from 'svelte/store';
 import type { PhoneticAnalysis, PhrasalAnalysis, ContentType } from '$lib/types';
 import { analyzeSentence } from '$lib/services/openai';
-import { authStore } from './auth';
 
 interface PracticeState {
 	currentSentence: string;
@@ -65,9 +64,7 @@ function createPracticeStore() {
 			}));
 
 			try {
-				const authState = get(authStore);
-				const accessToken = authState.session?.access_token;
-				const analysis = await analyzeSentence(sentence, contentType, accessToken);
+				const analysis = await analyzeSentence(sentence, contentType);
 				update((state) => ({ ...state, analysis, loading: false }));
 			} catch (err) {
 				const error = err instanceof Error ? err.message : 'Analysis failed';
