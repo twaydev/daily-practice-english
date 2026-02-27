@@ -76,7 +76,7 @@
 				<button
 					type="button"
 					onclick={() => removeTag(tag)}
-					class="ml-0.5 rounded-full hover:bg-primary/20 p-0.5 leading-none"
+					class="ml-0.5 rounded-full hover:bg-primary/20 p-1 leading-none"
 					aria-label="Remove tag {tag}"
 				>
 					×
@@ -90,7 +90,7 @@
 			onkeydown={handleKeyDown}
 			onblur={handleBlur}
 			placeholder={tags.length === 0 ? 'Add tags… (Enter or comma to confirm)' : ''}
-			class="flex-1 min-w-[120px] bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+			class="flex-1 min-w-[80px] sm:min-w-[120px] bg-transparent text-sm outline-none placeholder:text-muted-foreground"
 			{disabled}
 		/>
 	</div>

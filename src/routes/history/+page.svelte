@@ -98,7 +98,7 @@
 
 <div class="space-y-6">
 	<div>
-		<h1 class="text-2xl font-bold tracking-tight mb-1">Practice History</h1>
+		<h1 class="text-xl sm:text-2xl font-bold tracking-tight mb-1">Practice History</h1>
 		<p class="text-sm text-muted-foreground">Your recording attempts, grouped by sentence.</p>
 	</div>
 
@@ -150,22 +150,22 @@
 					<!-- Attempt rows -->
 					<div class="divide-y">
 						{#each group.attempts as attempt (attempt.id)}
-							<div class="px-4 py-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+							<div class="px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-x-4">
 								<!-- Date -->
-								<span class="text-xs text-muted-foreground w-36 shrink-0">
+								<span class="text-xs text-muted-foreground sm:w-36 sm:shrink-0">
 									{formatDate(attempt.created_at)}
 								</span>
 
 								<!-- Accuracy bar -->
-								<div class="flex items-center gap-2 flex-1 min-w-[120px]">
-									<div class="h-2 w-24 rounded-full bg-muted overflow-hidden">
+								<div class="flex items-center gap-2 flex-1">
+									<div class="h-2 w-24 rounded-full bg-muted overflow-hidden shrink-0">
 										<div
 											class="h-full rounded-full transition-all {scoreColor(attempt.accuracy_score)}"
 											style="width: {attempt.accuracy_score}%"
 										></div>
 									</div>
 									<span class="text-xs font-medium tabular-nums">{attempt.accuracy_score}%</span>
-									<span class="text-xs text-muted-foreground hidden sm:inline">
+									<span class="text-xs text-muted-foreground">
 										— {scoreLabel(attempt.accuracy_score)}
 									</span>
 								</div>
@@ -175,7 +175,7 @@
 									<button
 										onclick={() => handlePlay(attempt.id, attempt.audio_url)}
 										disabled={loadingId === attempt.id}
-										class="flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium border transition-colors hover:bg-accent disabled:opacity-50"
+										class="self-start sm:self-auto flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium border transition-colors hover:bg-accent disabled:opacity-50 min-h-[36px]"
 									>
 										{#if loadingId === attempt.id}
 											<Icon icon="mdi:loading" width="14" class="animate-spin" />

@@ -14,7 +14,7 @@
 
 <div class="min-h-screen flex flex-col">
 	<NavBar />
-	<main class="flex-1 mx-auto w-full max-w-5xl px-4 py-6">
+	<main class="flex-1 mx-auto w-full max-w-5xl px-3 sm:px-4 py-4 sm:py-6">
 		{@render children()}
 	</main>
 </div>

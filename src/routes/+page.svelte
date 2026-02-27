@@ -94,8 +94,8 @@
 	<!-- Guest: introduction / landing -->
 	<div class="flex flex-col items-center text-center space-y-10 py-12">
 		<div class="space-y-4 max-w-2xl">
-			<h1 class="text-4xl font-bold tracking-tight">Daily English Practice</h1>
-			<p class="text-lg text-muted-foreground">
+			<h1 class="text-3xl sm:text-4xl font-bold tracking-tight">Daily English Practice</h1>
+			<p class="text-base sm:text-lg text-muted-foreground">
 				Improve your spoken English with IPA phonetics, stress patterns, and AI-powered
 				pronunciation feedback — one sentence at a time.
 			</p>
@@ -150,7 +150,7 @@
 	<!-- Logged-in: full content -->
 	<div class="space-y-6">
 		<div class="text-center space-y-2">
-			<h1 class="text-3xl font-bold tracking-tight">Daily English Practice</h1>
+			<h1 class="text-2xl sm:text-3xl font-bold tracking-tight">Daily English Practice</h1>
 			<p class="text-muted-foreground max-w-xl mx-auto">
 				Improve your English pronunciation with IPA phonetics, stress patterns, and expert tips.
 			</p>

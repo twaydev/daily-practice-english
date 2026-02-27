@@ -158,7 +158,7 @@
   {#if !$practiceStore.analysis && !$practiceStore.loading}
     <div class="max-w-xl mx-auto space-y-6">
       <div class="text-center">
-        <h1 class="text-2xl font-bold tracking-tight mb-1">Practice</h1>
+        <h1 class="text-xl sm:text-2xl font-bold tracking-tight mb-1">Practice</h1>
         <p class="text-sm text-muted-foreground">
           Enter any English sentence or phrasal verb to get IPA phonetics and pronunciation tips.
         </p>
@@ -273,7 +273,7 @@
         <p class="text-sm text-muted-foreground italic">
           "{$practiceStore.currentSentence}"
         </p>
-        <p class="font-mono text-2xl tracking-wide text-primary">
+        <p class="font-mono text-lg sm:text-2xl tracking-wide text-primary break-all">
           {$practiceStore.analysis.ipa}
         </p>
         <p class="text-sm text-muted-foreground">
@@ -284,7 +284,7 @@
       </CardContent>
     </Card>
 
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-8 items-start">
       <!-- Left: phonetic analysis -->
       <PhoneticResult
         analysis={$practiceStore.analysis}
