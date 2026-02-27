@@ -1,6 +1,7 @@
 import { writable } from 'svelte/store';
 import type { User, Session } from '@supabase/supabase-js';
 import { supabase } from '$lib/services/supabase';
+import { base } from '$app/paths';
 
 interface AuthState {
 	user: User | null;
@@ -35,7 +36,13 @@ function createAuthStore() {
 		},
 
 		async signUp(email: string, password: string): Promise<void> {
-			const { error } = await supabase.auth.signUp({ email, password });
+			const emailRedirectTo =
+				typeof window !== 'undefined' ? `${window.location.origin}${base}/` : undefined;
+			const { error } = await supabase.auth.signUp({
+				email,
+				password,
+				options: { emailRedirectTo }
+			});
 			if (error) throw error;
 		},
 
