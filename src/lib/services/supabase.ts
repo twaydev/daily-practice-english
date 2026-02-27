@@ -124,6 +124,17 @@ export async function updatePracticeEntryAudio(
 	if (error) throw error;
 }
 
+export async function getPracticeEntries(userId: string): Promise<PracticeEntry[]> {
+	const { data, error } = await supabase
+		.from('practice_history')
+		.select('*')
+		.eq('user_id', userId)
+		.order('created_at', { ascending: false });
+
+	if (error) throw error;
+	return (data ?? []) as PracticeEntry[];
+}
+
 export async function getPracticeHistory(userId: string): Promise<PracticeHistoryGroup[]> {
 	const { data, error } = await supabase
 		.from('practice_history')
