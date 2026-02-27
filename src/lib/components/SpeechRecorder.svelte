@@ -3,6 +3,7 @@
 	import Icon from '@iconify/svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { transcribeAudio } from '$lib/services/openai';
+	import { computeAccuracy } from '$lib/utils';
 
 	type Props = {
 		targetText: string;
@@ -62,15 +63,6 @@
 		const m = Math.floor(s / 60);
 		const sec = s % 60;
 		return `${m}:${sec.toString().padStart(2, '0')}`;
-	}
-
-	function computeAccuracy(spoken: string, target: string): number {
-		const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9\s]/g, '');
-		const spokenWords = new Set(norm(spoken).split(/\s+/).filter(Boolean));
-		const targetWords = norm(target).split(/\s+/).filter(Boolean);
-		if (!targetWords.length) return 0;
-		const matches = targetWords.filter((w) => spokenWords.has(w)).length;
-		return Math.round((matches / targetWords.length) * 100);
 	}
 
 	async function startRecording() {
