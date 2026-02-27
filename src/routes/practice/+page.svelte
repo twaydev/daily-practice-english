@@ -134,8 +134,9 @@
       try {
         const path = await uploadRecording($authStore.user.id, entryId, blob);
         await updatePracticeEntryAudio(entryId, path);
-      } catch {
-        // Non-critical: audio upload failed, history entry still saved
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Upload failed';
+        toast.error(`Recording upload failed: ${msg}`);
       }
     }
   }
