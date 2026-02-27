@@ -18,7 +18,7 @@ export async function transcribeAudio(blob: Blob): Promise<string> {
 	const ext = blob.type.includes('ogg') ? 'ogg' : blob.type.includes('mp4') ? 'mp4' : 'webm';
 	formData.append('file', blob, `recording.${ext}`);
 
-	const response = await fetch(`${PUBLIC_SUPABASE_URL}/functions/v1/analyze-sentence`, {
+	const response = await fetch(`${PUBLIC_SUPABASE_URL}/functions/v1/transcribe-speech`, {
 		method: 'POST',
 		headers: { Authorization: `Bearer ${token}` },
 		body: formData
