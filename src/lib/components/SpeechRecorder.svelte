@@ -264,7 +264,7 @@
 				<!-- Audio preview (shown as soon as recording stops) -->
 				{#if audioUrl}
 					<!-- svelte-ignore a11y_media_has_caption -->
-					<audio controls src={audioUrl} class="w-full h-10 rounded-md"></audio>
+					<video controls src={audioUrl} class="w-full rounded-md" style="height:54px"></video>
 				{/if}
 
 				{#if transcribing}

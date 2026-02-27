@@ -198,7 +198,8 @@
 							{#if playingId === attempt.id && playingUrl}
 								<div class="px-4 pb-3">
 									<!-- svelte-ignore a11y_media_has_caption -->
-									<audio
+									<!-- svelte-ignore a11y_media_has_caption -->
+									<video
 										controls
 										src={playingUrl}
 										autoplay
@@ -206,15 +207,15 @@
 										style="height:54px"
 										onended={() => { playingId = null; playingUrl = null; }}
 										onerror={(e) => {
-											const el = e.currentTarget as HTMLAudioElement;
+											const el = e.currentTarget as HTMLVideoElement;
 											const code = el.error?.code ?? '?';
 											const msg = el.error?.message ?? 'unknown';
-											console.error('[audio] error', code, msg);
+											console.error('[video] error', code, msg);
 											toast.error(`Cannot play recording (error ${code}): ${msg}`);
 											playingId = null;
 											playingUrl = null;
 										}}
-									></audio>
+									></video>
 								</div>
 							{/if}
 						{/each}
