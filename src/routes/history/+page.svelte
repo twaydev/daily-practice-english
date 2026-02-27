@@ -8,6 +8,7 @@
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import { Badge } from '$lib/components/ui/badge';
 	import Icon from '@iconify/svelte';
+	import { toast } from 'svelte-sonner';
 
 	let groups = $state<PracticeHistoryGroup[]>([]);
 	let loading = $state(true);
@@ -58,10 +59,12 @@
 		loadingId = entryId;
 		try {
 			const signed = await getRecordingUrl(audioUrl);
+			console.log('[handlePlay] signed URL:', signed);
 			playingUrl = signed;
 			playingId = entryId;
-		} catch {
-			// Silently fail — recording may have expired
+		} catch (err) {
+			console.error('[handlePlay] getRecordingUrl failed:', err);
+			toast.error('Could not load recording. It may have expired or been deleted.');
 		} finally {
 			loadingId = null;
 		}

@@ -135,6 +135,7 @@
         const path = await uploadRecording($authStore.user.id, entryId, blob);
         await updatePracticeEntryAudio(entryId, path);
       } catch (err) {
+        console.error('[uploadRecording]', err);
         const msg = err instanceof Error ? err.message : 'Upload failed';
         toast.error(`Recording upload failed: ${msg}`);
       }
