@@ -35,6 +35,13 @@ function createAuthStore() {
 			if (error) throw error;
 		},
 
+		async signInWithMagicLink(email: string): Promise<void> {
+			const emailRedirectTo =
+				typeof window !== 'undefined' ? `${window.location.origin}${base}/` : undefined;
+			const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo } });
+			if (error) throw error;
+		},
+
 		async signUp(email: string, password: string): Promise<void> {
 			const emailRedirectTo =
 				typeof window !== 'undefined' ? `${window.location.origin}${base}/` : undefined;
