@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
 	import { authStore } from '$lib/stores/auth';
@@ -71,16 +71,29 @@
 		return unsubscribe;
 	});
 
+	function revokePlayingUrl() {
+		if (playingUrl?.startsWith('blob:')) URL.revokeObjectURL(playingUrl);
+		playingUrl = null;
+	}
+
+	onDestroy(revokePlayingUrl);
+
 	async function handlePlay(entryId: string, audioUrl: string | null | undefined) {
 		if (!audioUrl) return;
-		if (playingId === entryId) { playingId = null; playingUrl = null; return; }
+		if (playingId === entryId) { playingId = null; revokePlayingUrl(); return; }
 		loadingId = entryId;
 		try {
 			const signed = await getRecordingUrl(audioUrl);
-			playingUrl = signed;
+			// Fetch raw bytes and create a blob URL with a known-good MIME type.
+			// This bypasses Content-Type mismatches (e.g. video/webm stored in Supabase).
+			const resp = await fetch(signed);
+			if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+			const bytes = await resp.blob();
+			revokePlayingUrl();
+			playingUrl = URL.createObjectURL(new Blob([bytes], { type: 'audio/webm' }));
 			playingId = entryId;
 		} catch (err) {
-			console.error('[handlePlay] getRecordingUrl failed:', err);
+			console.error('[handlePlay] failed:', err);
 			toast.error('Could not load recording. It may have expired or been deleted.');
 		} finally {
 			loadingId = null;
@@ -270,14 +283,14 @@
 											autoplay
 											class="w-full rounded-md"
 											style="height:54px"
-											onended={() => { playingId = null; playingUrl = null; }}
+											onended={() => { playingId = null; revokePlayingUrl(); }}
 											onerror={(e) => {
 												const el = e.currentTarget as HTMLVideoElement;
 												const code = el.error?.code ?? '?';
 												console.error('[video] error', code);
 												toast.error(`Cannot play recording (error ${code})`);
 												playingId = null;
-												playingUrl = null;
+												revokePlayingUrl();
 											}}
 										></video>
 									{/if}
@@ -355,14 +368,14 @@
 										autoplay
 										class="w-full rounded-md"
 										style="height:54px"
-										onended={() => { playingId = null; playingUrl = null; }}
+										onended={() => { playingId = null; revokePlayingUrl(); }}
 										onerror={(e) => {
 											const el = e.currentTarget as HTMLVideoElement;
 											const code = el.error?.code ?? '?';
 											console.error('[video] error', code);
 											toast.error(`Cannot play recording (error ${code})`);
 											playingId = null;
-											playingUrl = null;
+											revokePlayingUrl();
 										}}
 									></video>
 								</div>
