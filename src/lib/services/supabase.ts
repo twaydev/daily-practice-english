@@ -99,7 +99,7 @@ export async function uploadRecording(
 ): Promise<string> {
 	const path = `${userId}/${entryId}.webm`;
 	const { error } = await supabase.storage.from('recordings').upload(path, blob, {
-		contentType: 'audio/webm',
+		contentType: blob.type || 'audio/webm',
 		upsert: true
 	});
 	if (error) throw error;

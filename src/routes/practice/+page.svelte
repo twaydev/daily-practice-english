@@ -122,6 +122,7 @@
 
   async function handleRecorded(transcript: string, score: number, blob: Blob | null) {
     if (!$authStore.user) return;
+    if (!transcript && !blob) return;
     const entryId = await addPracticeEntry(
       $authStore.user.id,
       savedSentence?.id ?? null,

@@ -34,8 +34,6 @@ serve(async (req: Request) => {
 	}
 
 	// Manual auth check — verify the caller is a signed-in user.
-	// verify_jwt is disabled at the gateway because production uses ES256 tokens
-	// that the gateway's built-in HS256 verifier rejects. We validate here instead.
 	const authHeader = req.headers.get('Authorization');
 	if (!authHeader) {
 		return new Response(JSON.stringify({ error: 'Unauthorized' }), {
@@ -62,6 +60,59 @@ serve(async (req: Request) => {
 		});
 	}
 
+	const openaiKey = Deno.env.get('OPENAI_API_KEY');
+	if (!openaiKey) {
+		return new Response(JSON.stringify({ error: 'OpenAI API key not configured' }), {
+			status: 500,
+			headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+		});
+	}
+
+	const contentType = req.headers.get('Content-Type') ?? '';
+
+	// ── Audio transcription via Whisper ──────────────────────────────────────
+	if (contentType.includes('multipart/form-data')) {
+		try {
+			const formData = await req.formData();
+			const audioFile = formData.get('file');
+
+			if (!audioFile || !(audioFile instanceof File)) {
+				return new Response(JSON.stringify({ error: 'audio file is required' }), {
+					status: 400,
+					headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+				});
+			}
+
+			const whisperForm = new FormData();
+			whisperForm.append('file', audioFile, audioFile.name || 'recording.webm');
+			whisperForm.append('model', 'whisper-1');
+			whisperForm.append('language', 'en');
+
+			const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+				method: 'POST',
+				headers: { Authorization: `Bearer ${openaiKey}` },
+				body: whisperForm
+			});
+
+			if (!response.ok) {
+				const errorText = await response.text();
+				throw new Error(`Whisper API error: ${response.status} ${errorText}`);
+			}
+
+			const data = await response.json();
+			return new Response(JSON.stringify({ transcript: data.text ?? '' }), {
+				headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+			});
+		} catch (error) {
+			const message = error instanceof Error ? error.message : 'Transcription failed';
+			return new Response(JSON.stringify({ error: message }), {
+				status: 500,
+				headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+			});
+		}
+	}
+
+	// ── Sentence / phrasal analysis via GPT-4o-mini ──────────────────────────
 	try {
 		const { sentence, content_type } = await req.json();
 
@@ -75,14 +126,6 @@ serve(async (req: Request) => {
 		if (sentence.length > 50) {
 			return new Response(JSON.stringify({ error: 'sentence must be 50 characters or fewer' }), {
 				status: 400,
-				headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-			});
-		}
-
-		const openaiKey = Deno.env.get('OPENAI_API_KEY');
-		if (!openaiKey) {
-			return new Response(JSON.stringify({ error: 'OpenAI API key not configured' }), {
-				status: 500,
 				headers: { ...corsHeaders, 'Content-Type': 'application/json' }
 			});
 		}

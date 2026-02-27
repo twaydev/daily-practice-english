@@ -19,6 +19,11 @@
 	let activeTab = $state('sentences');
 	let categoryFilter = $state<string | null>(null);
 
+	// Reset category filter whenever the user leaves the Sentences tab
+	$effect(() => {
+		if (activeTab !== 'sentences') categoryFilter = null;
+	});
+
 	const sentencesOnly = $derived(sentences.filter((s) => s.content_type === 'sentence'));
 	const phrasalsOnly = $derived(sentences.filter((s) => s.content_type === 'phrasal'));
 	const sentenceCategories = $derived([...new Set(sentencesOnly.map((s) => s.category))]);
@@ -52,15 +57,22 @@
 	}
 
 	onMount(() => {
+		let userDataLoaded = false;
+
 		const unsubscribe = authStore.subscribe((state) => {
 			if (state.loading) return;
 			if (state.user) {
 				if (!sentences.length) loadSeeded();
-				loadUserData(state.user.id);
+				// Guard so token refreshes don't trigger redundant fetches
+				if (!userDataLoaded) {
+					userDataLoaded = true;
+					loadUserData(state.user.id);
+				}
 			} else {
 				sentences = [];
 				userSentences = [];
 				favoriteIds = new Set();
+				userDataLoaded = false;
 			}
 		});
 
@@ -202,28 +214,52 @@
 						</div>
 					{/if}
 
-					<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-						{#each filteredSentences as sentence (sentence.id)}
-							<SentenceCard
-								{sentence}
-								isFavorited={favoriteIds.has(sentence.id)}
-								onFavoriteToggle={(fav) => toggleFavorite(sentence.id, fav)}
-							/>
-						{/each}
-					</div>
+					{#if filteredSentences.length === 0}
+						<div class="text-center py-16 text-muted-foreground">
+							<Icon icon="mdi:text-box-remove-outline" width="48" class="mx-auto mb-3 opacity-30" />
+							{#if categoryFilter}
+								<p class="font-medium mb-1">No sentences in this category</p>
+								<button
+									onclick={() => (categoryFilter = null)}
+									class="text-sm text-primary hover:underline"
+								>
+									Show all
+								</button>
+							{:else}
+								<p class="font-medium">No sentences yet</p>
+							{/if}
+						</div>
+					{:else}
+						<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+							{#each filteredSentences as sentence (sentence.id)}
+								<SentenceCard
+									{sentence}
+									isFavorited={favoriteIds.has(sentence.id)}
+									onFavoriteToggle={(fav) => toggleFavorite(sentence.id, fav)}
+								/>
+							{/each}
+						</div>
+					{/if}
 				</TabsContent>
 
 				<!-- Phrasal Verbs tab -->
 				<TabsContent value="phrasal">
-					<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-						{#each phrasalsOnly as sentence (sentence.id)}
-							<SentenceCard
-								{sentence}
-								isFavorited={favoriteIds.has(sentence.id)}
-								onFavoriteToggle={(fav) => toggleFavorite(sentence.id, fav)}
-							/>
-						{/each}
-					</div>
+					{#if phrasalsOnly.length === 0}
+						<div class="text-center py-16 text-muted-foreground">
+							<Icon icon="mdi:book-remove-outline" width="48" class="mx-auto mb-3 opacity-30" />
+							<p class="font-medium">No phrasal verbs yet</p>
+						</div>
+					{:else}
+						<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+							{#each phrasalsOnly as sentence (sentence.id)}
+								<SentenceCard
+									{sentence}
+									isFavorited={favoriteIds.has(sentence.id)}
+									onFavoriteToggle={(fav) => toggleFavorite(sentence.id, fav)}
+								/>
+							{/each}
+						</div>
+					{/if}
 				</TabsContent>
 
 				<!-- Mine tab -->

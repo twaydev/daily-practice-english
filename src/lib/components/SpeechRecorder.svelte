@@ -2,38 +2,38 @@
 	import { onMount, onDestroy } from 'svelte';
 	import Icon from '@iconify/svelte';
 	import { Button } from '$lib/components/ui/button';
+	import { transcribeAudio } from '$lib/services/openai';
 
 	type Props = {
 		targetText: string;
-		/** Called after recording stops with transcript, score, and audio blob (null if unavailable). */
+		/** Called after transcription completes with transcript, score, and audio blob. */
 		onRecorded: (transcript: string, score: number, blob: Blob | null) => Promise<void>;
 	};
 
 	let { targetText, onRecorded }: Props = $props();
 
-	let supported = $state(false);
 	let mediaSupported = $state(false);
 	let isRecording = $state(false);
+	let transcribing = $state(false);
+	let saving = $state(false);
+	/**
+	 * null  = no recording yet
+	 * ''    = recording done but no speech detected
+	 * string = the spoken transcript
+	 */
 	let transcript = $state<string | null>(null);
 	let score = $state<number | null>(null);
 	let error = $state<string | null>(null);
-	let saving = $state(false);
 	let audioUrl = $state<string | null>(null);
 	let duration = $state(0);
 
-	// Internal refs (not reactive)
 	let mediaRecorder: MediaRecorder | null = null;
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	let recognition: any = null;
 	let chunks: Blob[] = [];
 	let stream: MediaStream | null = null;
 	let timerInterval: ReturnType<typeof setInterval> | null = null;
-	let pendingTranscript = '';
+	let capturedMimeType = '';
 
 	onMount(() => {
-		supported =
-			typeof window !== 'undefined' &&
-			('SpeechRecognition' in window || 'webkitSpeechRecognition' in window);
 		mediaSupported =
 			typeof window !== 'undefined' && 'MediaRecorder' in window && 'mediaDevices' in navigator;
 	});
@@ -64,7 +64,6 @@
 		return `${m}:${sec.toString().padStart(2, '0')}`;
 	}
 
-	/** Word-overlap accuracy: how many target words appeared in what the user said. */
 	function computeAccuracy(spoken: string, target: string): number {
 		const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9\s]/g, '');
 		const spokenWords = new Set(norm(spoken).split(/\s+/).filter(Boolean));
@@ -75,12 +74,16 @@
 	}
 
 	async function startRecording() {
+		// Reset state
 		transcript = null;
 		score = null;
 		error = null;
-		audioUrl = null;
-		pendingTranscript = '';
 		chunks = [];
+		capturedMimeType = '';
+		if (audioUrl) {
+			URL.revokeObjectURL(audioUrl);
+			audioUrl = null;
+		}
 
 		try {
 			stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -89,58 +92,56 @@
 			return;
 		}
 
-		// Start MediaRecorder on the shared stream
 		mediaRecorder = new MediaRecorder(stream);
+		capturedMimeType = mediaRecorder.mimeType;
+
 		mediaRecorder.ondataavailable = (e) => {
 			if (e.data.size > 0) chunks.push(e.data);
 		};
+
 		mediaRecorder.onstop = async () => {
 			stream?.getTracks().forEach((t) => t.stop());
 			stream = null;
 
-			const blob = chunks.length > 0 ? new Blob(chunks, { type: 'audio/webm' }) : null;
+			const blob =
+				chunks.length > 0 ? new Blob(chunks, { type: capturedMimeType || 'audio/webm' }) : null;
+
+			// Show audio preview immediately so the user can listen while we transcribe
 			if (blob) {
 				if (audioUrl) URL.revokeObjectURL(audioUrl);
 				audioUrl = URL.createObjectURL(blob);
 			}
 
-			const spoken = pendingTranscript;
-			const s = computeAccuracy(spoken, targetText);
-			transcript = spoken || '(no speech detected)';
-			score = spoken ? s : 0;
+			if (!blob) {
+				transcript = '';
+				return;
+			}
+
+			// Transcribe via Whisper
+			transcribing = true;
+			let spoken = '';
+			try {
+				spoken = await transcribeAudio(blob);
+			} catch {
+				// Non-fatal: show audio without transcript
+			} finally {
+				transcribing = false;
+			}
+
+			spoken = spoken.trim();
+			const s = spoken ? computeAccuracy(spoken, targetText) : 0;
+			transcript = spoken;
+			score = spoken ? s : null;
 
 			saving = true;
 			try {
-				await onRecorded(spoken || '', s, blob);
+				await onRecorded(spoken, s, blob);
 			} finally {
 				saving = false;
 			}
 		};
+
 		mediaRecorder.start();
-
-		// Start SpeechRecognition in parallel (gracefully absent)
-		if (supported) {
-			// eslint-disable-next-line @typescript-eslint/no-explicit-any
-			const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-			recognition = new SR();
-			recognition!.lang = 'en-US';
-			recognition!.interimResults = false;
-			recognition!.maxAlternatives = 1;
-			recognition!.continuous = false;
-			// eslint-disable-next-line @typescript-eslint/no-explicit-any
-			recognition!.onresult = (event: any) => {
-				pendingTranscript = event.results[0][0].transcript;
-			};
-			recognition!.onerror = () => {
-				// Non-fatal: MediaRecorder still captures audio
-			};
-			try {
-				recognition!.start();
-			} catch {
-				// Ignore — recognition is optional
-			}
-		}
-
 		isRecording = true;
 		startTimer();
 	}
@@ -148,11 +149,6 @@
 	function stopRecording() {
 		stopTimer();
 		isRecording = false;
-
-		if (recognition) {
-			try { recognition.stop(); } catch { /* ignore */ }
-			recognition = null;
-		}
 		if (mediaRecorder && mediaRecorder.state !== 'inactive') {
 			mediaRecorder.stop();
 		}
@@ -162,6 +158,7 @@
 		transcript = null;
 		score = null;
 		error = null;
+		transcribing = false;
 		if (audioUrl) {
 			URL.revokeObjectURL(audioUrl);
 			audioUrl = null;
@@ -204,11 +201,13 @@
 						? 'bg-orange-500'
 						: 'bg-red-500'
 	);
+
+	const busy = $derived(transcribing || saving);
 </script>
 
-{#if !mediaSupported && !supported}
+{#if !mediaSupported}
 	<p class="text-xs text-muted-foreground italic">
-		Speech recording is not supported in this browser. Try Chrome or Edge.
+		Audio recording is not supported in this browser. Try Chrome, Edge, or Firefox.
 	</p>
 {:else}
 	<div class="space-y-3 rounded-md border p-4">
@@ -217,7 +216,7 @@
 				<Icon icon="mdi:microphone" width="16" />
 				Speak it aloud
 			</h3>
-			{#if transcript !== null}
+			{#if transcript !== null && !busy}
 				<button
 					onclick={reset}
 					class="text-xs text-muted-foreground hover:text-foreground transition-colors"
@@ -227,13 +226,13 @@
 			{/if}
 		</div>
 
-		{#if transcript === null && !isRecording}
+		{#if transcript === null && !isRecording && !busy}
 			<p class="text-xs text-muted-foreground">
 				Tap the button to start recording. Tap again to stop.
 			</p>
 		{/if}
 
-		<!-- Big tap-to-record / tap-to-stop pill button -->
+		<!-- Record / stop button -->
 		{#if isRecording}
 			<button
 				onclick={stopRecording}
@@ -245,48 +244,67 @@
 			</button>
 		{:else}
 			<Button
-				variant={transcript !== null ? 'outline' : 'default'}
-				onclick={transcript !== null ? reset : startRecording}
-				disabled={saving}
+				onclick={startRecording}
+				disabled={busy}
 				class="w-full rounded-full py-3 h-auto gap-2 font-semibold"
 			>
-				<Icon icon="mdi:microphone" width="18" />
-				{transcript !== null ? 'Try again' : 'Tap to record'}
+				{#if busy}
+					<Icon icon="mdi:loading" width="18" class="animate-spin" />
+					{transcribing ? 'Transcribing…' : 'Saving…'}
+				{:else}
+					<Icon icon="mdi:microphone" width="18" />
+					{transcript !== null ? 'Try again' : 'Tap to record'}
+				{/if}
 			</Button>
 		{/if}
 
-		{#if transcript !== null}
+		<!-- Results area -->
+		{#if audioUrl || transcript !== null}
 			<div class="space-y-3">
-				<!-- Local audio preview -->
+				<!-- Audio preview (shown as soon as recording stops) -->
 				{#if audioUrl}
+					<!-- svelte-ignore a11y_media_has_caption -->
 					<audio controls src={audioUrl} class="w-full h-10 rounded-md"></audio>
 				{/if}
 
-				<!-- What user said -->
-				<div class="rounded-md bg-muted/40 px-3 py-2 text-sm">
-					<p class="text-xs text-muted-foreground mb-1">You said:</p>
-					<p class="font-medium">{transcript}</p>
-				</div>
-
-				{#if score !== null}
-					<!-- Accuracy bar -->
-					<div class="space-y-1">
-						<div class="flex items-center justify-between text-sm">
-							<span class="text-muted-foreground">Accuracy</span>
-							<span class="font-semibold {scoreColor}">{score}% — {scoreLabel}</span>
+				{#if transcribing}
+					<p class="text-xs text-muted-foreground flex items-center gap-1.5">
+						<Icon icon="mdi:loading" width="12" class="animate-spin" />
+						Transcribing your speech…
+					</p>
+				{:else if transcript !== null}
+					<!-- Transcript -->
+					{#if transcript}
+						<div class="rounded-md bg-muted/40 px-3 py-2 text-sm">
+							<p class="text-xs text-muted-foreground mb-1">You said:</p>
+							<p class="font-medium">{transcript}</p>
 						</div>
-						<div class="h-2 w-full rounded-full bg-muted overflow-hidden">
-							<div
-								class="h-full rounded-full transition-all duration-500 {scoreBarColor}"
-								style="width: {score}%"
-							></div>
-						</div>
-					</div>
-
-					{#if saving}
-						<p class="text-xs text-muted-foreground">Saving attempt…</p>
 					{:else}
-						<p class="text-xs text-muted-foreground">Attempt saved to your history.</p>
+						<p class="text-xs text-muted-foreground italic">
+							No speech detected — make sure your mic is unmuted and try again.
+						</p>
+					{/if}
+
+					<!-- Accuracy bar (only when we have a real transcript) -->
+					{#if score !== null}
+						<div class="space-y-1">
+							<div class="flex items-center justify-between text-sm">
+								<span class="text-muted-foreground">Accuracy</span>
+								<span class="font-semibold {scoreColor}">{score}% — {scoreLabel}</span>
+							</div>
+							<div class="h-2 w-full rounded-full bg-muted overflow-hidden">
+								<div
+									class="h-full rounded-full transition-all duration-500 {scoreBarColor}"
+									style="width: {score}%"
+								></div>
+							</div>
+						</div>
+
+						{#if saving}
+							<p class="text-xs text-muted-foreground">Saving attempt…</p>
+						{:else}
+							<p class="text-xs text-muted-foreground">Attempt saved to your history.</p>
+						{/if}
 					{/if}
 				{/if}
 			</div>
